@@ -207,8 +207,6 @@ class MainActivity : AppCompatActivity() {
                         bld.actionPrintText(itm+"\n")
                     }
 
-                    //bld.actionPrintText(pt)
-
                     bld.actionPrintImage(ImageParameter(logo,150))
                     bld.actionPrintText(lf+lf)
                     bld.actionCut(CutType.Partial)
