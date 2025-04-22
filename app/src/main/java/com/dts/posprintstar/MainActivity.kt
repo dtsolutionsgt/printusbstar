@@ -31,7 +31,6 @@ import com.starmicronics.stario10.StarDeviceDiscoveryManagerFactory
 import com.starmicronics.stario10.StarPrinter
 import com.starmicronics.stario10.starxpandcommand.DocumentBuilder
 import com.starmicronics.stario10.starxpandcommand.DrawerBuilder
-import com.starmicronics.stario10.starxpandcommand.MagnificationParameter
 import com.starmicronics.stario10.starxpandcommand.PrinterBuilder
 import com.starmicronics.stario10.starxpandcommand.StarXpandCommandBuilder
 import com.starmicronics.stario10.starxpandcommand.drawer.OpenParameter
@@ -48,6 +47,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import java.io.File
+import kotlin.system.exitProcess
 
 class MainActivity : AppCompatActivity() {
 
@@ -56,7 +56,7 @@ class MainActivity : AppCompatActivity() {
     lateinit var bmp : Bitmap
 
     var usbaddress = ""
-    var linemode = 0
+    var runcount = 0
     var macro_param = ""
     var line = ""
 
@@ -66,7 +66,6 @@ class MainActivity : AppCompatActivity() {
 
     var Pmanager: StarDeviceDiscoveryManager? = null
 
-
     val ACTION_USB_PERMISSION = "com.android.example.USB_PERMISSION"
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -74,12 +73,11 @@ class MainActivity : AppCompatActivity() {
             super.onCreate(savedInstanceState)
             setContentView(R.layout.activity_main)
 
-
             val handler = Handler(Looper.getMainLooper())
             handler.postDelayed( {  grantPermissions() }, 200)
 
         } catch (e:Exception) {
-            msgbox(object : Any() {}.javaClass.enclosingMethod.name+". "+e.message)
+            msgclose(object : Any() {}.javaClass.enclosingMethod.name+". "+e.message)
         }
     }
 
@@ -93,7 +91,8 @@ class MainActivity : AppCompatActivity() {
 
     fun startApplication() {
         try {
-            if (!isAllFilesAccessGranted()) {
+
+            if (!Environment.isExternalStorageManager()) {
                 grandAllFilesAccess()
                 return
             }
@@ -101,7 +100,6 @@ class MainActivity : AppCompatActivity() {
             val mUsbManager = getSystemService(Context.USB_SERVICE) as UsbManager
             mDeviceList = mUsbManager?.getDeviceList()
             val mDeviceIterator = mDeviceList?.values
-
 
             mPermissionIntent = PendingIntent.getBroadcast(this, 0,Intent(ACTION_USB_PERMISSION),PendingIntent.FLAG_IMMUTABLE )
             val filter = IntentFilter(ACTION_USB_PERMISSION)
@@ -116,7 +114,6 @@ class MainActivity : AppCompatActivity() {
             }
 
             mUsbManager!!.requestPermission(mDevice, mPermissionIntent)
-
 
         } catch (e: Exception) {
             msgclose(object : Any() {}.javaClass.enclosingMethod.name+" . "+e.message)
@@ -173,7 +170,7 @@ class MainActivity : AppCompatActivity() {
             lines = file.readLines() as ArrayList<String>
 
             val handler = Handler(Looper.getMainLooper())
-            handler.postDelayed( { printDoc() }, 100)
+            handler.postDelayed( { printDoc() }, 1000)
         } catch (e: Exception) {
             msgclose(object : Any() {}.javaClass.enclosingMethod.name+" . "+e.message)
         }
@@ -187,49 +184,83 @@ class MainActivity : AppCompatActivity() {
             val printer = StarPrinter(settings, applicationContext)
             val job = SupervisorJob()
             val scope = CoroutineScope(Dispatchers.Default + job)
+            var bmp: Bitmap
+            var pp = 0
+            var pt = ""
+            var okflag = true
+            var factura=false
 
             scope.launch {
+
                 try {
                     var builder = StarXpandCommandBuilder()
                     var document = DocumentBuilder()
-                    var bld=PrinterBuilder()
-                    var lf=" \n"
+                    var bld = PrinterBuilder()
+                    var lf = " \n"
 
                     val logo = BitmapFactory.decodeResource(resources, R.drawable.logompos)
-
 
                     bld.styleInternationalCharacter(InternationalCharacterType.Usa)
                     bld.styleCharacterSpace(0.0)
 
-                    var pt=""
                     for (itm in lines) {
-                        //pt+=itm+"\n"
-                        bld.actionPrintText(itm+"\n")
+                        line=itm
+                        pp = line.indexOf("@@pic")
+                        if (pp == 0) {
+                            macro_param = line.substring(6)
+                            try {
+                                bmp = loadImage(macro_param)
+                                bld.actionPrintImage(ImageParameter(bmp, 400))
+                                factura=true
+                            } catch (eb: Exception) {
+                                toastlong(object :  Any() {}.javaClass.enclosingMethod.name + " . " + eb.message)
+                            }
+                        } else {
+                            bld.actionPrintText(itm + "\n")
+                        }
                     }
 
-                    bld.actionPrintImage(ImageParameter(logo,150))
-                    bld.actionPrintText(lf+lf)
+                    if (factura) {
+                        bld.actionPrintImage(ImageParameter(logo, 150))
+                        bld.actionPrintText(lf + lf)
+                    }
+
                     bld.actionCut(CutType.Partial)
 
-
                     document.addPrinter(bld)
-                    document.addDrawer(DrawerBuilder().actionOpen(OpenParameter()) )
+                    document.addDrawer(DrawerBuilder().actionOpen(OpenParameter()))
 
                     builder.addDocument(DocumentBuilder().addPrinter(bld))
 
-                    val commands = builder.getCommands()
+                    var commands = builder.getCommands()
 
                     printer.openAsync().await()
                     printer.printAsync(commands).await()
-                } catch (e: Exception) {
-                    msgclose(object : Any() {}.javaClass.enclosingMethod.name + " . " + e.message)
-                } finally {
-                    try {
-                        printer.closeAsync().await()
-                    } catch (e: Exception) { }
 
+                } catch (e: Exception) {
+                    okflag = false
+                    msgclose(object : Any() {}.javaClass.enclosingMethod.name + " . " + e.message)
+                }
+
+                try {
+                    /*
                     val handler = Handler(Looper.getMainLooper())
-                    handler.postDelayed( { finish() }, 300)
+                    handler.postDelayed( {
+                        printer.closeAsync().await()
+                    }, 300)
+                    */
+
+                    printer.closeAsync().await()
+                } catch (ee: Exception) {
+                    okflag = false
+                    msgclose(object : Any() {}.javaClass.enclosingMethod.name + " . " + ee.message)
+                }
+
+                if (okflag) {
+                    val handler = Handler(Looper.getMainLooper())
+                    handler.postDelayed( {
+                        exitProcess(0)
+                    }, 300)
                 }
             }
 
@@ -244,12 +275,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun grantPermissions() {
         try {
-            if (Build.VERSION.SDK_INT >= 20) {
-                if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
-                    startApplication()
-                } else {
-                    ActivityCompat.requestPermissions(this,arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),1)
-                }
+            if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
+                startApplication()
+            } else {
+                ActivityCompat.requestPermissions(this,arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),1)
             }
         } catch (e: java.lang.Exception) {
             toastlong(object : Any() {}.javaClass.enclosingMethod.name + " . " + e.message)
@@ -260,10 +289,10 @@ class MainActivity : AppCompatActivity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
 
         try {
-            if (Build.VERSION.SDK_INT >= 20) {
-                if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
-                    startApplication()
-                } else super.finish()
+            if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
+                startApplication()
+            } else {
+                super.finish()
             }
         } catch (e: java.lang.Exception) {
             toastlong(object : Any() {}.javaClass.enclosingMethod.name + " . " + e.message)
@@ -282,8 +311,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         val handler = Handler(Looper.getMainLooper())
-        handler.postDelayed( { finish() }, 500)
-
+        handler.postDelayed( {  finish()  }, 50)
     }
 
     val mUsbReceiver: BroadcastReceiver = object : BroadcastReceiver() {
@@ -299,7 +327,7 @@ class MainActivity : AppCompatActivity() {
                         val handler = Handler(Looper.getMainLooper())
                         handler.postDelayed( {
                             getUsb()
-                        }, 500)
+                        }, 250)
                     } else {
                         toast("PERMISO DE IMPRIMIR DENEGADO")
                     }
@@ -308,74 +336,67 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-
     //endregion
 
     //region Dialogs
 
-    fun msgbox(msg: String) {
-        try {
-            val dialog = AlertDialog.Builder(this)
-            dialog.setTitle("Impresion USB")
-            dialog.setMessage(msg)
-            dialog.setCancelable(false)
-            dialog.setNeutralButton("OK") { dialog, which -> }
-            dialog.show()
-        } catch (ex: java.lang.Exception) {
-            //toast(ex?.message!!)
-        }
-    }
-
     fun msgclose(msg: String) {
-        try {
-            val dialog = AlertDialog.Builder(this)
-            dialog.setTitle("Impresion USB")
-            dialog.setMessage(msg)
-            dialog.setCancelable(false)
-            dialog.setNeutralButton("OK") { dialog, which ->
-                val handler = Handler(Looper.getMainLooper())
-                handler.postDelayed( { finish() }, 300)
-            }
-            dialog.show()
-        } catch (ex: java.lang.Exception) {
-            //toast(ex?.message!!)
-        }
+
+        val handler = Handler(Looper.getMainLooper())
+        handler.postDelayed(
+            {
+                try {
+                    val dialog = AlertDialog.Builder(this)
+                    dialog.setTitle("Impresion USB")
+                    dialog.setMessage(msg)
+                    dialog.setCancelable(false)
+                    dialog.setNeutralButton("OK") { dialog, which ->
+                        val handler = Handler(Looper.getMainLooper())
+                        handler.postDelayed( { finish() }, 300)
+                    }
+                    dialog.show()
+                } catch (ex: java.lang.Exception) {
+                    //toast(ex?.message!!)
+                }
+            }, 100)
+
     }
 
     fun toast(msg: String) {
-        val toast = Toast.makeText(applicationContext, msg, Toast.LENGTH_SHORT)
-        toast.setGravity(Gravity.CENTER, 0, 0)
-        toast.show()
+
+        val handler = Handler(Looper.getMainLooper())
+        handler.postDelayed(
+            {
+                try {
+                    val toast = Toast.makeText(applicationContext, msg, Toast.LENGTH_SHORT)
+                    toast.setGravity(Gravity.CENTER, 0, 0)
+                    toast.show()
+                } catch (ex: java.lang.Exception) {  }
+            }, 50)
+
     }
 
     fun toastlong(msg: String) {
-        val toast = Toast.makeText(applicationContext, msg, Toast.LENGTH_LONG)
-        toast.setGravity(Gravity.CENTER, 0, 0)
-        toast.show()
+        val handler = Handler(Looper.getMainLooper())
+        handler.postDelayed(
+            {
+                try {
+                    val toast = Toast.makeText(applicationContext, msg, Toast.LENGTH_LONG)
+                    toast.setGravity(Gravity.CENTER, 0, 0)
+                    toast.show()
+                } catch (ex: java.lang.Exception) { }
+            }, 100)
+
     }
 
     //endregion
 
     //region Aux
 
-    fun isAllFilesAccessGranted(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            Environment.isExternalStorageManager()
-        } else {
-            true
-        }
-    }
-
-    fun closeSession() {
-        try {
-            //disconnectUSB()
-
-            val handler = Handler(Looper.getMainLooper())
-            handler.postDelayed( { finish() }, 300)
-
-        } catch (e: java.lang.Exception) {
-            toast(object : Any() {}.javaClass.enclosingMethod.name + " 1-. " + e.message)
-        }
+    fun loadImage(fname: String) : Bitmap {
+        val filename = Environment.getExternalStorageDirectory().toString() + "/"+ fname
+        bmp= BitmapFactory.decodeFile(filename)
+        return bmp
     }
 
     //endregion
