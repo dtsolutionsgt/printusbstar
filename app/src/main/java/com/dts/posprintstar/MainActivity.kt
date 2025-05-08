@@ -13,7 +13,6 @@ import android.graphics.BitmapFactory
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbManager
 import android.net.Uri
-import android.os.Build
 import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.os.Environment
@@ -34,20 +33,16 @@ import com.starmicronics.stario10.starxpandcommand.DrawerBuilder
 import com.starmicronics.stario10.starxpandcommand.PrinterBuilder
 import com.starmicronics.stario10.starxpandcommand.StarXpandCommandBuilder
 import com.starmicronics.stario10.starxpandcommand.drawer.OpenParameter
-import com.starmicronics.stario10.starxpandcommand.printer.Alignment
-import com.starmicronics.stario10.starxpandcommand.printer.BarcodeParameter
-import com.starmicronics.stario10.starxpandcommand.printer.BarcodeSymbology
 import com.starmicronics.stario10.starxpandcommand.printer.CutType
 import com.starmicronics.stario10.starxpandcommand.printer.ImageParameter
 import com.starmicronics.stario10.starxpandcommand.printer.InternationalCharacterType
-import com.starmicronics.stario10.starxpandcommand.printer.QRCodeLevel
-import com.starmicronics.stario10.starxpandcommand.printer.QRCodeParameter
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import java.io.File
 import kotlin.system.exitProcess
+import androidx.core.graphics.scale
 
 class MainActivity : AppCompatActivity() {
 
@@ -56,7 +51,6 @@ class MainActivity : AppCompatActivity() {
     lateinit var bmp : Bitmap
 
     var usbaddress = ""
-    var runcount = 0
     var macro_param = ""
     var line = ""
 
@@ -77,7 +71,7 @@ class MainActivity : AppCompatActivity() {
             handler.postDelayed( {  grantPermissions() }, 200)
 
         } catch (e:Exception) {
-            msgclose(object : Any() {}.javaClass.enclosingMethod.name+". "+e.message)
+            msgclose((object : Any() {}.javaClass.enclosingMethod?.name ?: "") +". "+e.message)
         }
     }
 
@@ -89,7 +83,7 @@ class MainActivity : AppCompatActivity() {
 
     //region Main
 
-    fun startApplication() {
+   private fun startApplication() {
         try {
 
             if (!Environment.isExternalStorageManager()) {
@@ -116,7 +110,7 @@ class MainActivity : AppCompatActivity() {
             mUsbManager!!.requestPermission(mDevice, mPermissionIntent)
 
         } catch (e: Exception) {
-            msgclose(object : Any() {}.javaClass.enclosingMethod.name+" . "+e.message)
+            msgclose((object : Any() {}.javaClass.enclosingMethod?.name ?: "") +" . "+e.message)
         }
     }
 
@@ -150,7 +144,7 @@ class MainActivity : AppCompatActivity() {
 
             Pmanager?.startDiscovery()
         } catch (e: Exception) {
-            msgclose(object : Any() {}.javaClass.enclosingMethod.name+" . "+e.message)
+            msgclose((object : Any() {}.javaClass.enclosingMethod?.name ?: "") +" . "+e.message)
         }
 
     }
@@ -160,114 +154,106 @@ class MainActivity : AppCompatActivity() {
             val handler = Handler(Looper.getMainLooper())
             handler.postDelayed( { loadDoc() }, 100)
         } catch (e: Exception) {
-            msgclose(object : Any() {}.javaClass.enclosingMethod.name+" . "+e.message)
+            msgclose((object : Any() {}.javaClass.enclosingMethod?.name ?: "") +" . "+e.message)
         }
     }
 
-    fun loadDoc() {
+    private fun loadDoc() {
         try {
             val file = File(Environment.getExternalStorageDirectory().toString() + "/print.txt")
             lines = file.readLines() as ArrayList<String>
 
             val handler = Handler(Looper.getMainLooper())
-            handler.postDelayed( { printDoc() }, 1000)
+            handler.postDelayed( { printDocument() }, 1000)
         } catch (e: Exception) {
-            msgclose(object : Any() {}.javaClass.enclosingMethod.name+" . "+e.message)
+            msgclose((object : Any() {}.javaClass.enclosingMethod?.name ?: "") +" . "+e.message)
         }
     }
 
-    fun printDoc() {
+    private fun printDocument() {
         try {
+            val connectionType = InterfaceType.Usb
+            val printerSettings = StarConnectionSettings(connectionType, usbaddress)
+            val starPrinter = StarPrinter(printerSettings, applicationContext)
+            val coroutineJob = SupervisorJob()
+            val coroutineScope = CoroutineScope(Dispatchers.Default + coroutineJob)
 
-            val interfaceType = InterfaceType.Usb
-            val settings = StarConnectionSettings(interfaceType, usbaddress)
-            val printer = StarPrinter(settings, applicationContext)
-            val job = SupervisorJob()
-            val scope = CoroutineScope(Dispatchers.Default + job)
-            var bmp: Bitmap
-            var pp = 0
-            var pt = ""
-            var okflag = true
-            var factura=false
+            var hasPrintedImage = false
+            var imageBitmap: Bitmap
+            var imagePathIndex = 0
+            var imagePath = ""
+            var wasSuccessful = true
 
-            scope.launch {
-
+            coroutineScope.launch {
                 try {
-                    var builder = StarXpandCommandBuilder()
-                    var document = DocumentBuilder()
-                    var bld = PrinterBuilder()
-                    var lf = " \n"
+                    val commandBuilder = StarXpandCommandBuilder()
+                    val documentBuilder = DocumentBuilder()
+                    val printerBuilder = PrinterBuilder()
+                    val newLine = " \n"
 
-                    val logo = BitmapFactory.decodeResource(resources, R.drawable.logompos)
+                    val logoBitmap = BitmapFactory.decodeResource(resources, R.drawable.logompos)
 
-                    bld.styleInternationalCharacter(InternationalCharacterType.Usa)
-                    bld.styleCharacterSpace(0.0)
+                    printerBuilder.styleInternationalCharacter(InternationalCharacterType.Usa)
+                    printerBuilder.styleCharacterSpace(0.0)
 
-                    for (itm in lines) {
-                        line=itm
-                        pp = line.indexOf("@@pic")
-                        if (pp == 0) {
-                            macro_param = line.substring(6)
+                    for (lineItem in lines) {
+                        line = lineItem
+                        imagePathIndex = line.indexOf("@@pic")
+
+                        if (imagePathIndex == 0) {
+                            imagePath = line.substring(6)
                             try {
-                                bmp = loadImage(macro_param)
-                                bld.actionPrintImage(ImageParameter(bmp, 400))
-                                factura=true
-                            } catch (eb: Exception) {
-                                toastlong(object :  Any() {}.javaClass.enclosingMethod.name + " . " + eb.message)
+                                imageBitmap = loadImage(imagePath)
+                                printerBuilder.actionPrintImage(ImageParameter(imageBitmap, 300))
+                                hasPrintedImage = true
+                            } catch (imageLoadException: Exception) {
+                                toastlong((object {}.javaClass.enclosingMethod?.name ?: "") + " . " + imageLoadException.message)
                             }
                         } else {
-                            bld.actionPrintText(itm + "\n")
+                            printerBuilder.actionPrintText(lineItem + "\n")
                         }
                     }
 
-                    if (factura) {
-                        bld.actionPrintImage(ImageParameter(logo, 150))
-                        bld.actionPrintText(lf + lf)
+                    if (hasPrintedImage) {
+                        printerBuilder.actionPrintImage(ImageParameter(logoBitmap, 150))
+                        printerBuilder.actionPrintText(newLine)
                     }
 
-                    bld.actionCut(CutType.Partial)
+                    printerBuilder.actionCut(CutType.Full)
+                    documentBuilder.addPrinter(printerBuilder)
+                    documentBuilder.addDrawer(DrawerBuilder().actionOpen(OpenParameter()))
 
-                    document.addPrinter(bld)
-                    document.addDrawer(DrawerBuilder().actionOpen(OpenParameter()))
+                    commandBuilder.addDocument(DocumentBuilder().addPrinter(printerBuilder))
+                    val printCommands = commandBuilder.getCommands()
 
-                    builder.addDocument(DocumentBuilder().addPrinter(bld))
+                    starPrinter.openAsync().await()
+                    starPrinter.printAsync(printCommands).await()
 
-                    var commands = builder.getCommands()
-
-                    printer.openAsync().await()
-                    printer.printAsync(commands).await()
-
-                } catch (e: Exception) {
-                    okflag = false
-                    msgclose(object : Any() {}.javaClass.enclosingMethod.name + " . " + e.message)
+                } catch (printException: Exception) {
+                    wasSuccessful = false
+                    msgclose((object {}.javaClass.enclosingMethod?.name ?: "") + " . " + printException.message)
                 }
 
                 try {
-                    /*
-                    val handler = Handler(Looper.getMainLooper())
-                    handler.postDelayed( {
-                        printer.closeAsync().await()
-                    }, 300)
-                    */
-
-                    printer.closeAsync().await()
-                } catch (ee: Exception) {
-                    okflag = false
-                    msgclose(object : Any() {}.javaClass.enclosingMethod.name + " . " + ee.message)
+                    starPrinter.closeAsync().await()
+                } catch (closeException: Exception) {
+                    wasSuccessful = false
+                    msgclose((object {}.javaClass.enclosingMethod?.name ?: "") + " . " + closeException.message)
                 }
 
-                if (okflag) {
+                if (wasSuccessful) {
                     val handler = Handler(Looper.getMainLooper())
-                    handler.postDelayed( {
+                    handler.postDelayed({
                         exitProcess(0)
                     }, 300)
                 }
             }
 
-        } catch (ex: Exception) {
-            msgclose(object : Any() {}.javaClass.enclosingMethod.name + " . " + ex.message)
+        } catch (outerException: Exception) {
+            msgclose((object {}.javaClass.enclosingMethod?.name ?: "") + " . " + outerException.message)
         }
     }
+
 
     //endregion
 
@@ -281,7 +267,7 @@ class MainActivity : AppCompatActivity() {
                 ActivityCompat.requestPermissions(this,arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),1)
             }
         } catch (e: java.lang.Exception) {
-            toastlong(object : Any() {}.javaClass.enclosingMethod.name + " . " + e.message)
+            toastlong((object : Any() {}.javaClass.enclosingMethod?.name ?: "") + " . " + e.message)
         }
     }
 
@@ -295,7 +281,7 @@ class MainActivity : AppCompatActivity() {
                 super.finish()
             }
         } catch (e: java.lang.Exception) {
-            toastlong(object : Any() {}.javaClass.enclosingMethod.name + " . " + e.message)
+            toastlong((object : Any() {}.javaClass.enclosingMethod?.name ?: "") + " . " + e.message)
         }
     }
 
@@ -314,7 +300,7 @@ class MainActivity : AppCompatActivity() {
         handler.postDelayed( {  finish()  }, 50)
     }
 
-    val mUsbReceiver: BroadcastReceiver = object : BroadcastReceiver() {
+    private val mUsbReceiver: BroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             val action = intent.action
 
@@ -340,7 +326,7 @@ class MainActivity : AppCompatActivity() {
 
     //region Dialogs
 
-    fun msgclose(msg: String) {
+    private fun msgclose(msg: String) {
 
         val handler = Handler(Looper.getMainLooper())
         handler.postDelayed(
@@ -393,10 +379,15 @@ class MainActivity : AppCompatActivity() {
 
     //region Aux
 
-    fun loadImage(fname: String) : Bitmap {
-        val filename = Environment.getExternalStorageDirectory().toString() + "/"+ fname
-        bmp= BitmapFactory.decodeFile(filename)
-        return bmp
+    private fun loadImage(fname: String): Bitmap {
+        val filePath = "${Environment.getExternalStorageDirectory()}/$fname"
+        val bitmap = BitmapFactory.decodeFile(filePath)
+
+        if (bitmap == null) {
+            throw IllegalArgumentException("No se pudo cargar la imagen: $filePath")
+        }
+
+        return bitmap
     }
 
     //endregion
