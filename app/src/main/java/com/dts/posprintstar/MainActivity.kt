@@ -195,7 +195,7 @@ class MainActivity : AppCompatActivity() {
 
                     printerBuilder.styleInternationalCharacter(InternationalCharacterType.Usa)
                     printerBuilder.styleCharacterSpace(0.0)
-
+//Change on the image format
                     for (lineItem in lines) {
                         line = lineItem
                         imagePathIndex = line.indexOf("@@pic")
