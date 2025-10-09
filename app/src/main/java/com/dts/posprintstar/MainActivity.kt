@@ -75,7 +75,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-
     //region Events
 
 
@@ -107,8 +106,11 @@ class MainActivity : AppCompatActivity() {
                 mDevice = usbDevice1
             }
 
-            mUsbManager!!.requestPermission(mDevice, mPermissionIntent)
-
+            try {
+                mUsbManager!!.requestPermission(mDevice, mPermissionIntent)
+            } catch (ee: Exception) {
+                msgclose("¡No está conectada ninguna impresora USB!");return
+            }
         } catch (e: Exception) {
             msgclose((object : Any() {}.javaClass.enclosingMethod?.name ?: "") +" . "+e.message)
         }
@@ -195,7 +197,7 @@ class MainActivity : AppCompatActivity() {
 
                     printerBuilder.styleInternationalCharacter(InternationalCharacterType.Usa)
                     printerBuilder.styleCharacterSpace(0.0)
-//Change on the image format
+
                     for (lineItem in lines) {
                         line = lineItem
                         imagePathIndex = line.indexOf("@@pic")
