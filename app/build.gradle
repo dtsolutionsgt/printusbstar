@@ -12,9 +12,9 @@ android {
 
     defaultConfig {
         applicationId "com.dts.posprintstar"
-        minSdk 26
+        minSdk 30
         //noinspection ExpiredTargetSdkVersion
-        targetSdk 23
+        targetSdk 30
         versionCode 1
         versionName "1.0"
 
