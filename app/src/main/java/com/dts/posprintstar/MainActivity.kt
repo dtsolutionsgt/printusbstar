@@ -126,41 +126,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-
-    private fun startApplicationOld() {
-        try {
-
-            if (!Environment.isExternalStorageManager()) {
-                grandAllFilesAccess()
-                return
-            }
-
-            val mUsbManager = getSystemService(Context.USB_SERVICE) as UsbManager
-            mDeviceList = mUsbManager?.getDeviceList()
-            val mDeviceIterator = mDeviceList?.values
-
-            mPermissionIntent = PendingIntent.getBroadcast(this, 0,Intent(ACTION_USB_PERMISSION),PendingIntent.FLAG_IMMUTABLE )
-            val filter = IntentFilter(ACTION_USB_PERMISSION)
-            registerReceiver(mUsbReceiver, filter)
-
-            var usbDevice = ""
-
-            for (itm in mDeviceList?.values!!) {
-                val usbDevice1 = itm
-                val interfaceCount = usbDevice1.interfaceCount
-                mDevice = usbDevice1
-            }
-
-            try {
-                mUsbManager!!.requestPermission(mDevice, mPermissionIntent)
-            } catch (ee: Exception) {
-                msgclose("¡No está conectada ninguna impresora USB! \n"+ee.message);return
-            }
-        } catch (e: Exception) {
-            msgclose((object : Any() {}.javaClass.enclosingMethod?.name ?: "") +" . "+e.message)
-        }
-    }
-
     fun getUsb()  {
 
         try {
