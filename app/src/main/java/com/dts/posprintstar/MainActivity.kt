@@ -54,7 +54,6 @@ class MainActivity : AppCompatActivity() {
     lateinit var bmp : Bitmap
 
     var usbaddress = ""
-    var macro_param = ""
     var line = ""
     var ds = ""
 
@@ -91,10 +90,11 @@ class MainActivity : AppCompatActivity() {
     private fun startApplication() {
         try {
 
+            /*
             if (!Environment.isExternalStorageManager()) {
-                grandAllFilesAccess()
-                return
+                grandAllFilesAccess();return
             }
+            */
 
             val mUsbManager = getSystemService(Context.USB_SERVICE) as UsbManager
             mDeviceList = mUsbManager?.getDeviceList()
@@ -104,10 +104,6 @@ class MainActivity : AppCompatActivity() {
             val filter = IntentFilter(ACTION_USB_PERMISSION)
             registerReceiver(mUsbReceiver, filter)
 
-            ds+=" , startApplication1"
-
-            // Find a USB device. You might want to add more specific logic
-            // to find your target printer instead of just taking the last one.
             if (mDeviceList?.values?.isNotEmpty() == true) {
                 mDevice = mDeviceList?.values?.first() // Or iterate to find a specific device
             }
@@ -116,12 +112,11 @@ class MainActivity : AppCompatActivity() {
                 try {
                     mUsbManager.requestPermission(mDevice, mPermissionIntent)
                 } catch (ee: Exception) {
-                    msgclose("Error de acceso a puerto USB: \n" + ee.message);
+                    //msgclose("Error de acceso a puerto USB: \n" + ee.message);
                 }
             } else {
-                msgclose("¡No está conectada ninguna impresora USB!");
+                //msgclose("¡No está conectada ninguna impresora USB!");
             }
-            ds+=" , startApplication2"
 
             getUsb()
 
@@ -167,9 +162,6 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun getUsb()  {
-        var usbname = ""
-
-        ds+=" , getUsb1"
 
         try {
             val interfaceTypes = mutableListOf<InterfaceType>()
@@ -182,27 +174,27 @@ class MainActivity : AppCompatActivity() {
                 applicationContext
             )
 
-            ds+=" , getUsb2"
-
             Pmanager?.discoveryTime = 10000
             Pmanager?.callback = object : StarDeviceDiscoveryManager.Callback {
                 override fun onPrinterFound(printer: StarPrinter) {
                     usbaddress=printer.connectionSettings.identifier
-                    ds+=" , "+usbaddress
                     if (usbaddress.isNotEmpty()) {
-                        ds+=" , getUsb2"
                         val handler = Handler(Looper.getMainLooper())
                         handler.postDelayed( {  processPrint() }, 200)
                     } else {
                         msgclose("¡No está conectada ninguna impresora USB!");
-                        ds+=" , no usb printer"
                     }
                     lbldebug?.text=ds
                 }
 
                 override fun onDiscoveryFinished() {
-
+                    if (usbaddress.isNotEmpty()) {
+                        msgclose("Error de acceso a puerto USB ");
+                    } else {
+                        msgclose("¡No está conectada ninguna impresora USB!");
+                    }
                 }
+
             }
 
             Pmanager?.startDiscovery()
@@ -324,16 +316,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun grantPermissions() {
         try {
-            ds+=" , grantPermissions1"
             if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
-                ds+=" , grantPermissions2"
                 startApplication()
             } else {
-                ds+=" , grantPermissions3"
                 ActivityCompat.requestPermissions(this,arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE),1)
             }
         } catch (e: java.lang.Exception) {
-            ds+=" , grantPermissions4 "+ e.message
             toastlong((object : Any() {}.javaClass.enclosingMethod?.name ?: "") + " . " + e.message)
         }
         lbldebug?.text=ds
@@ -372,14 +360,10 @@ class MainActivity : AppCompatActivity() {
         override fun onReceive(context: Context, intent: Intent) {
             val action = intent.action
 
-            ds+=" , mUsbReceiver1"
-
             if (ACTION_USB_PERMISSION == action) {
                 synchronized(this) {
                     val device =  intent.getParcelableExtra<Parcelable>(UsbManager.EXTRA_DEVICE) as UsbDevice?
-                    ds+=" , mUsbReceiver2"
                     if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, true)) {
-                        ds+=" , mUsbReceiver3"
                         val handler = Handler(Looper.getMainLooper())
                         handler.postDelayed( {
                             getUsb()
@@ -408,10 +392,7 @@ class MainActivity : AppCompatActivity() {
                     dialog.setCancelable(false)
                     dialog.setNeutralButton("OK") { dialog, which ->
                         val handler = Handler(Looper.getMainLooper())
-                        handler.postDelayed( {
-                            lbldebug?.text=ds
-                            //finish()
-                                             }, 300)
+                        handler.postDelayed( { finish() }, 300)
                     }
                     dialog.show()
                 } catch (ex: java.lang.Exception) {
